@@ -1,8 +1,21 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from './prisma.js'
 import { chatCompletion } from './openai.js'
 import { parseJsonArray } from './http.js'
 import { matchTeacherSubject, teacherSubjectList } from './teacherSubjects.js'
 import { createBoundedTtlCache } from './cache.js'
+
+function asDate(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value
+  if (value == null || value === '') return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function toIso(value) {
+  const parsed = asDate(value)
+  return parsed ? parsed.toISOString() : null
+}
 
 let tableReady = false
 const insightCache = createBoundedTtlCache({ max: 48, ttlMs: 10 * 60_000 })
@@ -72,7 +85,7 @@ export async function recordLearnTurn({ studentId, teacherId, subject, lesson, t
         (student_id, teacher_id, subject, lesson, topics, question, answer_preview, response_mode, created_at)
       VALUES
         (${student}, ${teacher}, ${canonical.slice(0, 128)}, ${lesson ? String(lesson).slice(0, 255) : null},
-         ${topicJson}, ${q.slice(0, 8000)}, ${previewAnswer(answer)},
+         ${Prisma.sql`CAST(${topicJson} AS JSONB)`}, ${q.slice(0, 8000)}, ${previewAnswer(answer)},
          ${responseMode ? String(responseMode).slice(0, 32) : null}, NOW())
     `
     invalidateInsightCache(teacher)
@@ -169,15 +182,15 @@ export async function buildTeacherInsights(teacherId) {
   const rows = (await prisma.$queryRaw`
     SELECT
       lt.id,
-      lt.student_id AS studentId,
-      lt.teacher_id AS teacherId,
+      lt.student_id AS "studentId",
+      lt.teacher_id AS "teacherId",
       lt.subject,
       lt.lesson,
       lt.topics,
       lt.question,
-      lt.response_mode AS responseMode,
-      lt.created_at AS createdAt,
-      u.name AS studentName
+      lt.response_mode AS "responseMode",
+      lt.created_at AS "createdAt",
+      u.name AS "studentName"
     FROM learn_turns lt
     INNER JOIN users u ON u.id = lt.student_id
     WHERE lt.teacher_id = ${Number(teacherId)}
@@ -186,9 +199,11 @@ export async function buildTeacherInsights(teacherId) {
   `).map((r) => ({
     ...r,
     id: Number(r.id),
-    studentId: Number(r.studentId),
-    teacherId: Number(r.teacherId),
-    createdAt: new Date(r.createdAt),
+    studentId: Number(r.studentId ?? r.studentid),
+    teacherId: Number(r.teacherId ?? r.teacherid),
+    createdAt: asDate(r.createdAt ?? r.createdat ?? r.created_at),
+    studentName: r.studentName ?? r.studentname,
+    responseMode: r.responseMode ?? r.responsemode,
   }))
   const profile = await prisma.teacherProfile.findUnique({
     where: { userId: Number(teacherId) },
@@ -206,7 +221,7 @@ export async function buildTeacherInsights(teacherId) {
   }
 
   async function insightsFor(subject, list) {
-    const todayRows = list.filter((r) => r.createdAt >= todayStart)
+    const todayRows = list.filter((r) => r.createdAt && r.createdAt >= todayStart)
     if (!list.length) {
       return {
         subject,
@@ -247,7 +262,7 @@ export async function buildTeacherInsights(teacherId) {
         lesson: r.lesson,
         student_name: r.studentName || 'Student',
         response_mode: r.responseMode,
-        created_at: new Date(r.createdAt).toISOString(),
+        created_at: toIso(r.createdAt),
       })),
     }
   }
@@ -262,7 +277,7 @@ export async function buildTeacherInsights(teacherId) {
   const todayTopics = [...new Set(subjects.flatMap((s) => s.self_learned_topics_today))].slice(0, 16)
   return {
     teacher_subjects: taught,
-    today_question_count: matchedRows.filter((r) => r.createdAt >= todayStart).length,
+    today_question_count: matchedRows.filter((r) => r.createdAt && r.createdAt >= todayStart).length,
     today_topics: todayTopics,
     subjects,
   }

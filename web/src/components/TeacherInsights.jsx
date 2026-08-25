@@ -6,8 +6,10 @@ import { FlapPanel, FlapPanelHead, FlapRow, FlapTab } from './ui/Board.jsx'
 
 function formatWhen(iso) {
   if (!iso) return ''
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return ''
   try {
-    return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    return parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
   } catch {
     return ''
   }

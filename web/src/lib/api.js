@@ -609,7 +609,9 @@ async function teacherProfileGet(request) {
     .map((r) => ({
       feedback: r.feedback,
       rating: r.rating,
-      created_at: r.createdAt.toISOString(),
+      created_at: r.createdAt instanceof Date && !Number.isNaN(r.createdAt.getTime())
+        ? r.createdAt.toISOString()
+        : null,
     }))
   return json({
     user: publicUser(auth.user, {
