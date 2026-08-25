@@ -72,6 +72,15 @@ export async function loginRequest(payload) {
   }
 }
 
+export async function demoLoginRequest(role) {
+  try {
+    const response = await api.post('/login/demo', { role })
+    return { data: response.data, error: null }
+  } catch (error) {
+    return { data: null, error: extractErrors(error) }
+  }
+}
+
 export async function verifyOtp(payload) {
   try {
     const response = await api.post('/otp/verify', payload)

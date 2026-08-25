@@ -1,4 +1,11 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from './prisma.js'
+
+function jsonb(value) {
+  if (value == null) return Prisma.sql`NULL`
+  const text = typeof value === 'string' ? value : JSON.stringify(value)
+  return Prisma.sql`CAST(${text} AS JSONB)`
+}
 
 let ready = false
 
@@ -230,7 +237,7 @@ export async function insertQuestion(quizId, q, sortOrder) {
     INSERT INTO quiz_questions (
       quiz_id, sort_order, type, prompt, options, correct_answer, explanation, topic_title, misconception_hint
     ) VALUES (
-      ${quizId}, ${sortOrder}, ${q.type}, ${q.prompt}, ${options},
+      ${quizId}, ${sortOrder}, ${q.type}, ${q.prompt}, ${jsonb(options)},
       ${q.correctAnswer}, ${q.explanation}, ${q.topicTitle}, ${q.misconceptionHint}
     )
   `
@@ -302,7 +309,7 @@ export async function updateQuizFields(id, { title, difficulty, status, question
       status = ${nextStatus},
       question_count = ${nextCount},
       published_at = ${nextPublished},
-      insights_json = ${insightsStr}
+      insights_json = ${jsonb(insightsStr)}
     WHERE id = ${Number(id)}
   `
   return getQuiz(id)
@@ -317,7 +324,7 @@ export async function updateQuestionRow(id, data) {
     UPDATE quiz_questions SET
       type = ${data.type ?? q.type},
       prompt = ${data.prompt ?? q.prompt},
-      options = ${options},
+      options = ${jsonb(options)},
       correct_answer = ${data.correctAnswer ?? q.correctAnswer},
       explanation = ${data.explanation ?? q.explanation},
       topic_title = ${data.topicTitle ?? q.topicTitle}
@@ -404,7 +411,7 @@ export async function saveAnswer(row) {
       ) VALUES (
         ${row.attemptId}, ${row.questionId}, ${row.firstAnswer}, ${row.firstIsCorrect == null ? null : row.firstIsCorrect},
         ${row.latestAnswer}, ${row.isCorrect}, ${row.timeMs || 0}, ${row.hintCount || 0},
-        ${row.incorrectAttempts || 0}, ${row.revealed}, ${row.misconception || null}, ${thread}
+        ${row.incorrectAttempts || 0}, ${row.revealed}, ${row.misconception || null}, ${jsonb(thread)}
       )
     `
     return getAnswer(row.attemptId, row.questionId)
@@ -420,7 +427,7 @@ export async function saveAnswer(row) {
       incorrect_attempts = ${row.incorrectAttempts ?? existing.incorrectAttempts},
       revealed = ${row.revealed},
       misconception = ${row.misconception ?? existing.misconception},
-      tutor_thread = ${thread}
+      tutor_thread = ${jsonb(thread)}
     WHERE id = ${existing.id}
   `
   return getAnswer(row.attemptId, row.questionId)
@@ -441,7 +448,7 @@ export async function updateAttempt(id, fields) {
       score_percent = ${fields.scorePercent === undefined ? a.scorePercent : fields.scorePercent},
       correct_count = ${fields.correctCount ?? a.correctCount},
       total_time_ms = ${fields.totalTimeMs ?? a.totalTimeMs},
-      summary_json = ${summary}
+      summary_json = ${jsonb(summary)}
     WHERE id = ${Number(id)}
   `
   return getAttempt(id)

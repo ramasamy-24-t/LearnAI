@@ -46,6 +46,7 @@ export async function handleApi(request, slugParts) {
     if (slug === 'teacher/register' && method === 'POST') return await registerTeacher(request)
     if (slug === 'student/register' && method === 'POST') return await registerStudent(request)
     if (slug === 'login' && method === 'POST') return await login(request)
+    if (slug === 'login/demo' && method === 'POST') return await demoLogin(request)
     if (slug === 'otp/verify' && method === 'POST') return await verifyOtp(request)
     if (slug === 'otp/resend' && method === 'POST') return await resendOtp(request)
     if (slug === 'student/dashboard' && method === 'GET') return await studentDashboard(request)
@@ -245,6 +246,28 @@ async function registerStudent(request) {
   return json(payload)
 }
 
+const DEMO_ACCOUNTS = {
+  student: { email: 'rsamy2426@gmail.com' },
+  teacher: { email: 'ram.holoroid@gmail.com' },
+}
+
+async function loginPayload(user) {
+  let onboardingCompleted = true
+  if (user.role === 'teacher') {
+    const profile = await prisma.teacherProfile.findUnique({ where: { userId: user.id } })
+    onboardingCompleted = Boolean(profile?.onboardingCompleted)
+  }
+  return {
+    message: 'Logged in successfully.',
+    token: signToken(user.id, user.tokenVersion ?? 0),
+    user: publicUser(user, {
+      onboarding_completed: onboardingCompleted,
+      password_changed_at: user.passwordChangedAt,
+      email_changed_at: user.emailChangedAt,
+    }),
+  }
+}
+
 async function login(request) {
   const body = await readJson(request)
   const { email, password, role } = body
@@ -259,20 +282,19 @@ async function login(request) {
       role: user.role,
     }, 403)
   }
-  let onboardingCompleted = true
-  if (user.role === 'teacher') {
-    const profile = await prisma.teacherProfile.findUnique({ where: { userId: user.id } })
-    onboardingCompleted = Boolean(profile?.onboardingCompleted)
+  return json(await loginPayload(user))
+}
+
+async function demoLogin(request) {
+  const body = await readJson(request)
+  const role = String(body.role || '').trim().toLowerCase()
+  const target = DEMO_ACCOUNTS[role]
+  if (!target) return json({ message: 'Unknown demo role.' }, 422)
+  const user = await prisma.user.findUnique({ where: { email: target.email } })
+  if (!user || user.role !== role) {
+    return json({ message: 'Demo account is not set up yet.' }, 404)
   }
-  return json({
-    message: 'Logged in successfully.',
-    token: signToken(user.id, user.tokenVersion ?? 0),
-    user: publicUser(user, {
-      onboarding_completed: onboardingCompleted,
-      password_changed_at: user.passwordChangedAt,
-      email_changed_at: user.emailChangedAt,
-    }),
-  })
+  return json(await loginPayload(user))
 }
 
 async function verifyOtp(request) {

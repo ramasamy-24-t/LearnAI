@@ -9,7 +9,7 @@ import { useAuth } from '../context/useAuth.js'
 import { resolveRoute } from '../context/AuthContextInner.jsx'
 
 function Login() {
-  const { login, user, token, authReady } = useAuth()
+  const { login, loginDemo, user, token, authReady } = useAuth()
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
   const [role, setRole] = useState('teacher')
@@ -51,6 +51,22 @@ function Login() {
       else if (error.message) setGeneralError(error.message)
       if (error.role) setRole(String(error.role).toLowerCase())
       setSubmitting(false); return
+    }
+    if (redirectTo) router.replace(redirectTo)
+    setSubmitting(false)
+  }
+
+  const handleDemoLogin = async (demoRole) => {
+    if (submitting) return
+    setSubmitting(true)
+    setErrors({})
+    setGeneralError('')
+    setRole(demoRole)
+    const { error, ok, redirectTo } = await loginDemo(demoRole)
+    if (!ok && error) {
+      if (error.message) setGeneralError(error.message)
+      setSubmitting(false)
+      return
     }
     if (redirectTo) router.replace(redirectTo)
     setSubmitting(false)
@@ -106,6 +122,30 @@ function Login() {
               {submitting ? <span className="spinner" aria-label="Loading" /> : 'Log in'}
             </button>
           </form>
+
+          <div className="mt-5 pt-5 border-t border-[var(--board-rule)]">
+            <p className="mb-3 text-center font-[family-name:var(--font-flap)] text-[0.7rem] font-semibold tracking-[0.16em] uppercase text-[var(--flap-mute)]">
+              Presentation demo
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => handleDemoLogin('student')}
+                className="px-3 py-2.5 font-[family-name:var(--font-flap)] text-xs font-semibold tracking-[0.12em] uppercase text-[var(--flap-ink)] bg-[var(--flap-face)] border border-[var(--board-rule)] disabled:opacity-60 cursor-pointer hover:border-[var(--flap-amber)]"
+              >
+                Demo student
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => handleDemoLogin('teacher')}
+                className="px-3 py-2.5 font-[family-name:var(--font-flap)] text-xs font-semibold tracking-[0.12em] uppercase text-[var(--flap-ink)] bg-[var(--flap-face)] border border-[var(--board-rule)] disabled:opacity-60 cursor-pointer hover:border-[var(--flap-amber)]"
+              >
+                Demo maths teacher
+              </button>
+            </div>
+          </div>
 
           <p className="mt-5 text-center text-sm text-[var(--flap-mute)]">
             Don&apos;t have an account?{' '}

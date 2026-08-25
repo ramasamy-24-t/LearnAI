@@ -4,7 +4,7 @@ import PropTypes from 'prop-types'
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { fetchTeacherProfile, loginRequest } from '../services/api.js'
+import { demoLoginRequest, fetchTeacherProfile, loginRequest } from '../services/api.js'
 
 export const AuthContext = createContext(undefined)
 
@@ -105,15 +105,11 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true }
   }, [role, token, updateUser, user?.avatar_url, user?.id, user?.onboarding_completed, user?.role])
 
-  const login = useCallback(
-    async ({ email, password, role: loginRole }) => {
-      const payload = { email, password, role: loginRole }
-      const { data, error } = await loginRequest(payload)
-      if (error) return { ok: false, error, redirectTo: null }
-
+  const applyLoginResult = useCallback(
+    (data, fallbackRole) => {
       const nextToken = data.token || data.access_token || null
       const nextUser = data.user || null
-      const nextRole = accountRole(nextUser, loginRole)
+      const nextRole = accountRole(nextUser, fallbackRole)
       const redirectTo = resolveRoute(nextUser)
 
       flushSync(() => {
@@ -124,6 +120,25 @@ export function AuthProvider({ children }) {
       return { ok: true, error: null, redirectTo }
     },
     [router, setAuthSession],
+  )
+
+  const login = useCallback(
+    async ({ email, password, role: loginRole }) => {
+      const payload = { email, password, role: loginRole }
+      const { data, error } = await loginRequest(payload)
+      if (error) return { ok: false, error, redirectTo: null }
+      return applyLoginResult(data, loginRole)
+    },
+    [applyLoginResult],
+  )
+
+  const loginDemo = useCallback(
+    async (demoRole) => {
+      const { data, error } = await demoLoginRequest(demoRole)
+      if (error) return { ok: false, error, redirectTo: null }
+      return applyLoginResult(data, demoRole)
+    },
+    [applyLoginResult],
   )
 
   const logout = useCallback(() => {
@@ -140,13 +155,14 @@ export function AuthProvider({ children }) {
       token,
       role: accountRole(user, role),
       login,
+      loginDemo,
       logout,
       updateUser,
       setAuthSession,
       isAuthenticated: Boolean(token),
       authReady,
     }),
-    [authReady, login, logout, role, setAuthSession, token, updateUser, user],
+    [authReady, login, loginDemo, logout, role, setAuthSession, token, updateUser, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
