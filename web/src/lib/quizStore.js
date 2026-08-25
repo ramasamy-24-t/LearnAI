@@ -117,6 +117,18 @@ export async function ensureQuizTables() {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS student_learning_recs_student ON student_learning_recs (student_id, status)
   `)
+  for (const table of ['quizzes', 'quiz_questions', 'quiz_attempts', 'quiz_attempt_answers']) {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE ${table}
+        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP,
+        ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP
+    `)
+    await prisma.$executeRawUnsafe(`
+      UPDATE ${table}
+      SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)
+      WHERE updated_at IS NULL
+    `)
+  }
   ready = true
 }
 
@@ -407,11 +419,13 @@ export async function saveAnswer(row) {
     await prisma.$executeRaw`
       INSERT INTO quiz_attempt_answers (
         attempt_id, question_id, first_answer, first_is_correct, latest_answer, is_correct,
-        time_ms, hint_count, incorrect_attempts, revealed, misconception, tutor_thread
+        time_ms, hint_count, incorrect_attempts, revealed, misconception, tutor_thread,
+        created_at, updated_at
       ) VALUES (
         ${row.attemptId}, ${row.questionId}, ${row.firstAnswer}, ${row.firstIsCorrect == null ? null : row.firstIsCorrect},
         ${row.latestAnswer}, ${row.isCorrect}, ${row.timeMs || 0}, ${row.hintCount || 0},
-        ${row.incorrectAttempts || 0}, ${row.revealed}, ${row.misconception || null}, ${jsonb(thread)}
+        ${row.incorrectAttempts || 0}, ${row.revealed}, ${row.misconception || null}, ${jsonb(thread)},
+        NOW(), NOW()
       )
     `
     return getAnswer(row.attemptId, row.questionId)
@@ -427,7 +441,8 @@ export async function saveAnswer(row) {
       incorrect_attempts = ${row.incorrectAttempts ?? existing.incorrectAttempts},
       revealed = ${row.revealed},
       misconception = ${row.misconception ?? existing.misconception},
-      tutor_thread = ${jsonb(thread)}
+      tutor_thread = ${jsonb(thread)},
+      updated_at = NOW()
     WHERE id = ${existing.id}
   `
   return getAnswer(row.attemptId, row.questionId)
@@ -448,7 +463,8 @@ export async function updateAttempt(id, fields) {
       score_percent = ${fields.scorePercent === undefined ? a.scorePercent : fields.scorePercent},
       correct_count = ${fields.correctCount ?? a.correctCount},
       total_time_ms = ${fields.totalTimeMs ?? a.totalTimeMs},
-      summary_json = ${jsonb(summary)}
+      summary_json = ${jsonb(summary)},
+      updated_at = NOW()
     WHERE id = ${Number(id)}
   `
   return getAttempt(id)
